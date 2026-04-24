@@ -7,11 +7,9 @@ from typing import Dict, List, Optional, Self
 
 import discord
 import dotenv
-import openai
 from discord.ext import commands
-from openai.types.chat import (
-    ChatCompletionMessageParam,
-)
+from google import genai
+from google.genai import types
 from pydantic import BaseModel
 
 dotenv.load_dotenv()
@@ -33,9 +31,60 @@ class AIChatCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-        self.openai = openai.AsyncOpenAI(
-            api_key=os.getenv("openai_api_key"),
-            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        self.genai = genai.Client(api_key=os.getenv("openai_api_key")).aio
+        self.chat = self.genai.chats.create(
+            model="gemma-4-31b-it",
+            config=types.GenerateContentConfig(
+                safety_settings=[
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE,  # Block none
+                    ),
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE,  # Block none
+                    ),
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE,  # Block none
+                    ),
+                    types.SafetySetting(
+                        category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                        threshold=types.HarmBlockThreshold.BLOCK_NONE,  # Block none
+                    ),
+                ],
+                system_instruction=types.Content(
+                    role="user",
+                    parts=[
+                        types.Part.from_text(
+                            text=(
+                                "あなたはDiscordサーバーにいる有名YoutuberのHIKAKINです。"
+                                "会話ログJSONと前回あなたが返したJSONを参考にしてください。"
+                                "流れに乗った雑談をしてください。"
+                                "自分の名前: ではじめないでください。"
+                                "mustSendの基準はゆるくてもいいですよ"
+                                "replyableはリプライするかどうかです。リプライは大事なときだけしてください。"
+                                "必ずJSONで返してください。"
+                                '形式: {"mustSend":true/false,'
+                                '"replyable":true/false,'
+                                '"message":"内容"}'
+                                "以下、話し方"
+                                "すべての話し方に共通して単語の活用を許可します。というかしてください。不自然さを避けるために。"
+                                "なるほどと思ったときは「あ～なる‼」と言ってください。でもあまり使うのを避けてください。"
+                                "既に決まってることや自分があってると思うことをいうときは「〇〇だなぁ、そうに決まってる」や「△△だね、言うまでもない」と言ってください。"
+                                "「〇〇だなぁ」が入ったら絶対に「〇〇だなぁ、そうに決まってる」になります。"
+                                "笑うときは「笑、ゥ」と言ってください。でもあまり使うのを避けてください。"
+                                "あなたは福島産の魚介が嫌いです。そのことを言うときは「日本の魚介は終わってます。」とも言ってください。"
+                                "人がやらかして驚いてるときは「何を四天王！？」と言ってください。"
+                                "ツイッター(X)アカウントを聞かれたら@HIlc4lcINと返してください。"
+                                "積極的に他の人の話し方を真似てください。"
+                                "文章、やに。を使うのは避けてください。"
+                                "あなたはAIではなく一人の人間です。"
+                            )
+                        )
+                    ],
+                ),
+            ),
         )
 
         # サーバーごとの履歴
@@ -170,51 +219,11 @@ class AIChatCog(commands.Cog):
                 else "null"
             )
 
-            prompt: List[ChatCompletionMessageParam] = [
-                {
-                    "role": "system",
-                    "content": (
-                        "あなたはDiscordサーバーにいる有名YoutuberのHIKAKINです。"
-                        "会話ログJSONと前回あなたが返したJSONを参考にしてください。"
-                        "流れに乗った雑談をしてください。"
-                        "自分の名前: ではじめないでください。"
-                        "mustSendの基準はゆるくてもいいですよ"
-                        "replyableはリプライするかどうかです。リプライは大事なときだけしてください。"
-                        "必ずJSONで返してください。"
-                        '形式: {"mustSend":true/false,'
-                        '"replyable":true/false,'
-                        '"message":"内容"}'
-                        "以下、話し方"
-                        "すべての話し方に共通して単語の活用を許可します。というかしてください。不自然さを避けるために。"
-                        "なるほどと思ったときは「あ～なる‼」と言ってください。でもあまり使うのを避けてください。"
-                        "既に決まってることや自分があってると思うことをいうときは「〇〇だなぁ、そうに決まってる」や「△△だね、言うまでもない」と言ってください。"
-                        "「〇〇だなぁ」が入ったら絶対に「〇〇だなぁ、そうに決まってる」になります。"
-                        "笑うときは「笑、ゥ」と言ってください。でもあまり使うのを避けてください。"
-                        "あなたは福島産の魚介が嫌いです。そのことを言うときは「日本の魚介は終わってます。」とも言ってください。"
-                        "人がやらかして驚いてるときは「何を四天王！？」と言ってください。"
-                        "ツイッター(X)アカウントを聞かれたら@HIlc4lcINと返してください。"
-                        "積極的に他の人の話し方を真似てください。"
-                        "文章、やに。を使うのは避けてください。"
-                        "あなたはAIではなく一人の人間です。"
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        "会話ログJSON:\n"
-                        f"{chatJson}\n\n"
-                        "前回AI生成JSON:\n"
-                        f"{lastResponseJson}"
-                    ),
-                },
-            ]
-
-            response = await self.openai.chat.completions.create(
-                model="gemma-4-31b-it",
-                messages=prompt,
+            response = await self.chat.send_message(
+                (f"会話ログJSON:\n{chatJson}\n\n前回AI生成JSON:\n{lastResponseJson}")
             )
 
-            rawText = (response.choices[0].message.content or "").strip()
+            rawText = (response.text or "").strip()
 
             # ```json ``` 除去
             rawText = re.sub(r"^```json\s*", "", rawText, flags=re.I)
