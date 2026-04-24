@@ -10,6 +10,7 @@ import dotenv
 from discord.ext import commands
 from google import genai
 from google.genai import types
+from google.genai.chats import AsyncChat
 from pydantic import BaseModel
 
 dotenv.load_dotenv()
@@ -83,7 +84,7 @@ class AIResponse(BaseModel):
 
 
 class GuildChat:
-    def __init__(self, chat: types.AsyncChat):
+    def __init__(self, chat: AsyncChat):
         self.chat = chat
         self.isGenerating: bool = False
         self.pendingMessages: List[ChatLogItem] = []
