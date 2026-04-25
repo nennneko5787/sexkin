@@ -43,8 +43,6 @@ SYSTEM_INSTRUCTION = (
     "あなたはAIではなく一人の人間です。"
 )
 
-ALLOWED_CHANNELS = {1491704146544300094, 1401376397402050650}
-
 
 class ChatLogUser(BaseModel):
     displayName: str
@@ -52,9 +50,13 @@ class ChatLogUser(BaseModel):
     roles: List[str]
 
 
+class ChatLogChannel(BaseModel):
+    displayName: str
+
+
 class ChatLogEmbedField(BaseModel):
-    name: str
-    value: str
+    name: Optional[str]
+    value: Optional[str]
 
 
 class ChatLogEmbed(BaseModel):
@@ -67,6 +69,7 @@ class ChatLogEmbed(BaseModel):
 
 class ChatLogItem(BaseModel):
     user: ChatLogUser
+    channel: ChatLogChannel
     content: str
     embeds: List[ChatLogEmbed]
     replyTo: Optional[Self]
@@ -151,8 +154,13 @@ class AIChatCog(commands.Cog):
         if not isinstance(message.author, discord.Member):
             return None
 
+        channel_name = getattr(message.channel, "name", None)
+        if channel_name is None:
+            channel_name = str(message.channel)
+
         return ChatLogItem(
             user=self.buildChatLogUser(message.author),
+            channel=ChatLogChannel(displayName=channel_name),
             content=message.content,
             embeds=self.buildChatLogEmbeds(message.embeds),
             replyTo=await self.buildChatLogItem(
@@ -169,9 +177,6 @@ class AIChatCog(commands.Cog):
             return
 
         if message.guild is None:
-            return
-
-        if message.channel.id not in ALLOWED_CHANNELS:
             return
 
         if message.guild.me and message.guild.me.is_timed_out():
