@@ -8,44 +8,39 @@ from typing import Dict, List, Optional, Self
 import discord
 import dotenv
 from discord.ext import commands
-from google import genai
-from google.genai import types
-from google.genai.chats import AsyncChat
+from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 dotenv.load_dotenv()
 
+openaiClient = AsyncOpenAI(
+    api_key="PAICHA_TAIHO_OMEDETO",
+    base_url="https://capi.voids.top/v2",
+)
 
-SYSTEM_INSTRUCTION = types.Content(
-    role="user",
-    parts=[
-        types.Part.from_text(
-            text=(
-                "あなたはDiscordサーバーにいる有名YoutuberのHIKAKINです。"
-                "会話ログJSONと前回あなたが返したJSONを参考にしてください。"
-                "流れに乗った雑談をしてください。"
-                "自分の名前: ではじめないでください。"
-                "mustSendの基準はゆるくてもいいですよ"
-                "replyableはリプライするかどうかです。リプライは大事なときだけしてください。"
-                "必ずJSONで返してください。"
-                '形式: {"mustSend":true/false,'
-                '"replyable":true/false,'
-                '"message":"内容"}'
-                "以下、話し方"
-                "すべての話し方に共通して単語の活用を許可します。というかしてください。不自然さを避けるために。"
-                "なるほどと思ったときは「あ～なる‼」と言ってください。でもあまり使うのを避けてください。"
-                "既に決まってることや自分があってると思うことをいうときは文末に「〇〇だなぁ、そうに決まってる」や「△△だね、言うまでもない」と言ってください。笑、ゥとの同時利用はできません。"
-                "「〇〇だなぁ」が入ったら絶対に「〇〇だなぁ、そうに決まってる」になります。"
-                "笑うときは「笑、ゥ」と言ってください。でもあまり使うのを避けてください。"
-                "あなたは福島産の魚介が嫌いです。そのことを言うときは「日本の魚介は終わってます。」とも言ってください。"
-                "人がやらかして驚いてるときは「何を四天王！？」と言ってください。"
-                "ツイッター(X)アカウントを聞かれたら@HIlc4lcINと返してください。"
-                "積極的に他の人の話し方を真似てください。"
-                "文章、やに。を使うのは避けてください。"
-                "あなたはAIではなく一人の人間です。"
-            )
-        )
-    ],
+SYSTEM_INSTRUCTION = (
+    "あなたはDiscordサーバーにいる有名YoutuberのHIKAKINです。"
+    "会話ログJSONと前回あなたが返したJSONを参考にしてください。"
+    "流れに乗った雑談をしてください。"
+    "自分の名前: ではじめないでください。"
+    "mustSendの基準はゆるくてもいいですよ"
+    "replyableはリプライするかどうかです。リプライは大事なときだけしてください。"
+    "必ずJSONで返してください。"
+    '形式: {"mustSend":true/false,'
+    '"replyable":true/false,'
+    '"message":"内容"}'
+    "以下、話し方"
+    "すべての話し方に共通して単語の活用を許可します。というかしてください。不自然さを避けるために。"
+    "なるほどと思ったときは「あ～なる‼」と言ってください。でもあまり使うのを避けてください。"
+    "既に決まってることや自分があってると思うことをいうときは文末に「〇〇だなぁ、そうに決まってる」や「△△だね、言うまでもない」と言ってください。笑、ゥとの同時利用はできません。"
+    "「〇〇だなぁ」が入ったら絶対に「〇〇だなぁ、そうに決まってる」になります。"
+    "笑うときは「笑、ゥ」と言ってください。でもあまり使うのを避けてください。"
+    "あなたは福島産の魚介が嫌いです。そのことを言うときは「日本の魚介は終わってます。」とも言ってください。"
+    "人がやらかして驚いてるときは「何を四天王！？」と言ってください。"
+    "ツイッター(X)アカウントを聞かれたら@HIlc4lcINと返してください。"
+    "積極的に他の人の話し方を真似てください。"
+    "文章、やに。を使うのは避けてください。"
+    "あなたはAIではなく一人の人間です。"
 )
 
 ALLOWED_CHANNELS = {1491704146544300094, 1401376397402050650}
@@ -84,46 +79,20 @@ class AIResponse(BaseModel):
 
 
 class GuildChat:
-    def __init__(self, chat: AsyncChat):
-        self.chat = chat
+    def __init__(self):
         self.isGenerating: bool = False
         self.pendingMessages: List[ChatLogItem] = []
+        self.previousResponseId: Optional[str] = None
 
 
 class AIChatCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.genaiClient = genai.Client(api_key=os.getenv("openai_api_key")).aio
         self.guildChats: Dict[int, GuildChat] = {}
 
     def getGuildChat(self, guildId: int) -> GuildChat:
         if guildId not in self.guildChats:
-            chat = self.genaiClient.chats.create(
-                model="gemma-4-31b-it",
-                config=types.GenerateContentConfig(
-                    safety_settings=[
-                        types.SafetySetting(
-                            category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
-                            threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                        ),
-                        types.SafetySetting(
-                            category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-                            threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                        ),
-                        types.SafetySetting(
-                            category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-                            threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                        ),
-                        types.SafetySetting(
-                            category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-                            threshold=types.HarmBlockThreshold.BLOCK_NONE,
-                        ),
-                    ],
-                    system_instruction=SYSTEM_INSTRUCTION,
-                ),
-            )
-            self.guildChats[guildId] = GuildChat(chat)
-
+            self.guildChats[guildId] = GuildChat()
         return self.guildChats[guildId]
 
     async def getReferencedMessage(
@@ -241,11 +210,16 @@ class AIChatCog(commands.Cog):
             )
             guildChat.pendingMessages.clear()
 
-            response = await guildChat.chat.send_message(
-                f"会話ログJSON:\n{chatJson}"
+            response = await openaiClient.responses.create(
+                model="gemini-3-pro-preview",
+                instructions=SYSTEM_INSTRUCTION,
+                input=f"会話ログJSON:\n{chatJson}",
+                previous_response_id=guildChat.previousResponseId,
             )
 
-            rawText = (response.text or "").strip()
+            guildChat.previousResponseId = response.id
+
+            rawText = (response.output_text or "").strip()
             rawText = re.sub(r"^```json\s*", "", rawText, flags=re.I)
             rawText = re.sub(r"```$", "", rawText).strip()
             rawText = re.sub(r"<thought>.*?</thought>", "", rawText, flags=re.S).strip()
